@@ -1,0 +1,508 @@
+Option Explicit
+Sub FormatReport()
+'This sub imports three source files and then builds a report to compile information from each source file. 
+'Any sensitive information has been removed, so specifics like filepaths and filenames will need to be inserted if you intend to use this code.
+'It is not recommended to use this method to import csv files, there is a much better method to achieve this using Power Query. 
+'This code is intended for VBA fundamentals and posterity.
+'
+'Make sure you have updated the files in the correct location
+'Once those are overwritten, run this sub to format the report, save a copy to the shared folder, and compose an email to the payroll team.
+'
+'TC 2023
+'
+
+Application.ScreenUpdating = False
+Worksheets("Summary").Activate
+Worksheets("Summary").Protect DrawingObjects:=False, Contents:=False, Scenarios:=False
+Range("A2:G2000").ClearContents
+
+Call FormatReport1
+
+Call FormatReport2
+
+Call FormatReport3
+
+Call SummarizeSheets
+
+
+Sheets("Summary").Activate
+Range("H2").FormulaR1C1 = "=IFERROR(IF(XLOOKUP(RC2,Report1!C[3],Report1!C[4])=0,"""",XLOOKUP(RC2,Report1!C[3],Report1!C[4])),"""")"
+    Range("H2").AutoFill Destination:=Range("H2:H" & Range("G" & Rows.Count).End(xlUp).Row)
+    
+Range("I2").FormulaR1C1 = "=IFERROR(IF(XLOOKUP(RC[-7],Report2!C[4],Report2!C[5])=0,"""",XLOOKUP(RC[-7],Report2!C[4],Report2!C[5])),"""")"
+    Range("I2").AutoFill Destination:=Range("I2:I" & Range("G" & Rows.Count).End(xlUp).Row)
+    
+Range("J2").FormulaR1C1 = "=IFERROR(IF(XLOOKUP(RC2,Report3!C[6],Report3!C[7])=0,"""",XLOOKUP(RC2,Report3!C[6],Report3!C[7])),"""")"
+   Range("J2").AutoFill Destination:=Range("J2:J" & Range("G" & Rows.Count).End(xlUp).Row)
+
+Range("A1").Select
+ 
+Worksheets("Summary").Columns("B:B").NumberFormat = "00000000"
+Worksheets("Summary").Range("$A$1:$G$239").RemoveDuplicates Columns:=2, Header:=xlYes
+Worksheets("Summary").Protect AllowSorting:=True, AllowFiltering:=True
+
+Call saveas
+Call ReportEmail
+Call compileemails
+
+End Sub
+
+
+Private Sub FormatReport1()
+'
+' FormatReport1 Macro
+' For the Report1 tab
+' Format and import Report1 tab
+'
+'
+Sheets("Report1").Activate
+    Cells.Select
+    Selection.ClearContents
+    
+Workbooks.Open ("[insert file path for Report1 as string]")
+    Cells.Copy
+  
+Windows("ReportBuilder.xlsx").Activate
+Worksheets("Report1").Activate
+    Range("A1").Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+ Workbooks("Report1.csv").Close (False)
+    
+ Worksheets("Report1").Activate
+ ActiveSheet.AutoFilterMode = False
+    Columns("A:A").Select
+    Selection.Insert Shift:=xlToRight, CopyOrigin:=xlFormatFromLeftOrAbove
+    Range("A1").Value = "PRA"
+    Columns("B:B").NumberFormat = "00000000"
+   
+Range("A2").FormulaR1C1 = "=XLOOKUP(RC[3],'LookupTab'!C,'LookupTab'!C[1])"
+Range("A2").Select
+    Selection.AutoFill Destination:=Range("A2:A" & Range("B" & Rows.Count).End(xlUp).Row)
+    Range(Selection, Selection.End(xlDown)).Select
+        
+'Iterates through each row and removes any row that pulled an error from the lookup.
+Dim lRow As Long
+Dim iCntr As Long
+lRow = Rows.Count
+
+For iCntr = lRow To 1 Step -1
+    If IsError(Cells(iCntr, 1)) Then
+        Rows(iCntr).Delete
+    End If
+Next
+   
+
+Call pivotinsertReport1
+
+Rows(1).AutoFilter
+Range("A1").Select
+
+End Sub
+
+Private Sub pivotinsertReport1()
+'
+' pivotinsert for Report1 tab
+' inserts a pivot table based on the data in Report1.
+'
+
+'if the sheet is blank, don't try to run this sub- skip to the next step
+If Worksheets("Report1").Range("A2") = "" Then
+    Exit Sub
+End If
+
+'find row count for Report1
+Dim Report1Rows As Long
+Report1Rows = Sheets("Report1").UsedRange.Rows.Count
+
+    Application.CutCopyMode = False
+    ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:= _
+        "Report1!R1C1:R" & Report1Rows & "C10", Version:=8).CreatePivotTable TableDestination:= _
+        "Report1!R2C11", TableName:="PivotTable3", DefaultVersion:=8
+    Sheets("Report1").Select
+    Cells(2, 11).Select
+    With ActiveSheet.PivotTables("PivotTable3")
+        .ColumnGrand = True
+        .HasAutoFormat = True
+        .DisplayErrorString = False
+        .DisplayNullString = True
+        .EnableDrilldown = True
+        .ErrorString = ""
+        .MergeLabels = False
+        .NullString = ""
+        .PageFieldOrder = 2
+        .PageFieldWrapCount = 0
+        .PreserveFormatting = True
+        .RowGrand = True
+        .SaveData = True
+        .PrintTitles = False
+        .RepeatItemsOnEachPrintedPage = True
+        .TotalsAnnotation = False
+        .CompactRowIndent = 1
+        .InGridDropZones = False
+        .DisplayFieldCaptions = True
+        .DisplayMemberPropertyTooltips = False
+        .DisplayContextTooltips = True
+        .ShowDrillIndicators = True
+        .PrintDrillIndicators = False
+        .AllowMultipleFilters = False
+        .SortUsingCustomLists = True
+        .FieldListSortAscending = False
+        .ShowValuesRow = False
+        .CalculatedMembersInFilters = False
+        .RowAxisLayout xlCompactRow
+    End With
+    With ActiveSheet.PivotTables("PivotTable3").PivotCache
+        .RefreshOnFileOpen = False
+        .MissingItemsLimit = xlMissingItemsDefault
+    End With
+    ActiveSheet.PivotTables("PivotTable3").RepeatAllLabels xlRepeatLabels
+    ActiveSheet.PivotTables("PivotTable3").AddDataField ActiveSheet.PivotTables( _
+        "PivotTable3").PivotFields("Report1 Balance"), "Sum of Report1 Balance", xlSum
+    With ActiveSheet.PivotTables("PivotTable3").PivotFields("EMPLID")
+        .Orientation = xlRowField
+        .Position = 1
+    End With
+End Sub
+
+Private Sub FormatReport2()
+   
+'import new data    
+Workbooks.Open ("[insert file path for Report2 as string]")
+    Cells.Copy
+
+Windows("ReportBuilder.xlsx").Activate
+Worksheets("Report2").Activate
+    Range("A1").Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+    
+Workbooks("Report2.csv").Close (False)
+
+'format table    
+Sheets("Report2").Activate
+    ActiveSheet.AutoFilterMode = False
+    Columns("A:A").Select
+    Selection.Insert Shift:=xlToRight, CopyOrigin:=xlFormatFromLeftOrAbove
+    Range("A1").Value = "PRA"
+    Columns("B:B").NumberFormat = "00000000"
+    
+If Worksheets("Report2").Range("B2") = "" Then
+    Exit Sub
+End If
+
+
+'fill vlookup
+Range("A2").FormulaR1C1 = "=XLOOKUP(RC[3],'PRA Alias'!C,'PRA Alias'!C[1])"
+Range("A2").Select
+    Selection.AutoFill Destination:=Range("A2:A" & Range("B" & Rows.Count).End(xlUp).Row)
+    Range(Selection, Selection.End(xlDown)).Select
+
+'iterates through each row and removes any rows that returned as an error ("N/A") in the lookup
+Dim lRow As Long
+Dim iCntr As Long
+lRow = Rows.Count
+
+For iCntr = lRow To 1 Step -1
+    If IsError(Cells(iCntr, 1)) Then
+        Rows(iCntr).Delete
+    End If
+Next
+
+
+Call insertpivotReport2
+
+Range("A1").Select
+Rows(1).AutoFilter
+
+End Sub
+
+Private Sub insertpivotReport2()
+'
+' insertpivotReport2 Macro
+'
+'
+
+'if the sheet is blank, don't try to run this sub- skip to the next step
+If Worksheets("Report2").Range("A2") = "" Then
+    Exit Sub
+End If
+
+'find row count for Report2
+Dim Report2Rows As Long
+Report2Rows = Sheets("Report2").UsedRange.Rows.Count
+
+  Application.CutCopyMode = False
+    ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:= _
+        "'Report2'!R1C1:R" & Report2Rows & "C12", Version:=8).CreatePivotTable TableDestination:= _
+        "'Report2'!R2C13", TableName:="PivotTable3", DefaultVersion:=8
+    Sheets("Report2").Select
+    Cells(2, 13).Select
+    With ActiveSheet.PivotTables("PivotTable3")
+        .ColumnGrand = True
+        .HasAutoFormat = True
+        .DisplayErrorString = False
+        .DisplayNullString = True
+        .EnableDrilldown = True
+        .ErrorString = ""
+        .MergeLabels = False
+        .NullString = ""
+        .PageFieldOrder = 2
+        .PageFieldWrapCount = 0
+        .PreserveFormatting = True
+        .RowGrand = True
+        .SaveData = True
+        .PrintTitles = False
+        .RepeatItemsOnEachPrintedPage = True
+        .TotalsAnnotation = False
+        .CompactRowIndent = 1
+        .InGridDropZones = False
+        .DisplayFieldCaptions = True
+        .DisplayMemberPropertyTooltips = False
+        .DisplayContextTooltips = True
+        .ShowDrillIndicators = True
+        .PrintDrillIndicators = False
+        .AllowMultipleFilters = False
+        .SortUsingCustomLists = True
+        .FieldListSortAscending = False
+        .ShowValuesRow = False
+        .CalculatedMembersInFilters = False
+        .RowAxisLayout xlCompactRow
+    End With
+    With ActiveSheet.PivotTables("PivotTable3").PivotCache
+        .RefreshOnFileOpen = False
+        .MissingItemsLimit = xlMissingItemsDefault
+    End With
+    ActiveSheet.PivotTables("PivotTable3").RepeatAllLabels xlRepeatLabels
+    ActiveSheet.PivotTables("PivotTable3").AddDataField ActiveSheet.PivotTables( _
+        "PivotTable3").PivotFields("Report2 Balance"), "Sum of Report2 Balance" _
+        , xlSum
+    With ActiveSheet.PivotTables("PivotTable3").PivotFields("Employee ID")
+        .Orientation = xlRowField
+        .Position = 1
+    End With
+End Sub
+
+Private Sub FormatReport3()
+
+'import new data
+Workbooks.Open ("[insert Report3 file path as string]")
+    Cells.Copy
+    
+Windows("ReportBuilder.xlsx").Activate
+Worksheets("Report3").Activate
+    Range("A1").Select
+    ActiveSheet.Paste
+    Application.CutCopyMode = False
+
+Workbooks("Report3.csv").Close (False)
+
+'format table
+Worksheets("Report3").Activate
+  ActiveSheet.AutoFilterMode = False
+    Columns("A:A").Select
+    Selection.Insert Shift:=xlToRight, CopyOrigin:=xlFormatFromLeftOrAbove
+    Range("A1").Value = "PRA"
+    Columns("B:B").NumberFormat = "00000000"
+
+
+'If the report is blank, skip this sub and move to the next step
+If Worksheets("Report3").Range("B3") = "" Then
+    Exit Sub
+End If
+
+
+'fill vlookup
+Range("A2").FormulaR1C1 = "=XLOOKUP(RC[4],'PRA Alias'!C,'PRA Alias'!C[1])"
+Range("A2").Select
+    Selection.AutoFill Destination:=Range("A2:A" & Range("B" & Rows.Count).End(xlUp).Row)
+    Range(Selection, Selection.End(xlDown)).Select
+
+
+'iterates through each row and removes any rows that returned as an error ("N/A") in the lookup
+Dim lRow As Long
+Dim iCntr As Long
+lRow = Rows.Count
+
+For iCntr = lRow To 1 Step -1
+    If IsError(Cells(iCntr, 1)) Then
+        Rows(iCntr).Delete
+    End If
+Next
+
+
+Call insertpivotReport3
+
+Rows(1).AutoFilter
+Range("A1").Select
+
+End Sub
+
+Private Sub insertpivotReport3()
+'
+' insertpivotReport3 Macro
+'
+'
+If Worksheets("Report3").Range("B2") = "" Then
+    Exit Sub
+End If
+
+'find row count for Report3
+Dim Report3Rows As Long
+Report3Rows = Sheets("Report3").UsedRange.Rows.Count
+
+  Application.CutCopyMode = False
+    ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:= _
+        "'Report3'!R1C1:R" & Report3Rowss & "C15", Version:=8).CreatePivotTable TableDestination:= _
+        "'Report3'!R2C16", TableName:="PivotTable4", DefaultVersion:=8
+    Sheets("Report3").Select
+    Cells(2, 13).Select
+    With ActiveSheet.PivotTables("PivotTable4")
+        .ColumnGrand = True
+        .HasAutoFormat = True
+        .DisplayErrorString = False
+        .DisplayNullString = True
+        .EnableDrilldown = True
+        .ErrorString = ""
+        .MergeLabels = False
+        .NullString = ""
+        .PageFieldOrder = 2
+        .PageFieldWrapCount = 0
+        .PreserveFormatting = True
+        .RowGrand = True
+        .SaveData = True
+        .PrintTitles = False
+        .RepeatItemsOnEachPrintedPage = True
+        .TotalsAnnotation = False
+        .CompactRowIndent = 1
+        .InGridDropZones = False
+        .DisplayFieldCaptions = True
+        .DisplayMemberPropertyTooltips = False
+        .DisplayContextTooltips = True
+        .ShowDrillIndicators = True
+        .PrintDrillIndicators = False
+        .AllowMultipleFilters = False
+        .SortUsingCustomLists = True
+        .FieldListSortAscending = False
+        .ShowValuesRow = False
+        .CalculatedMembersInFilters = False
+        .RowAxisLayout xlCompactRow
+    End With
+    With ActiveSheet.PivotTables("PivotTable4").PivotCache
+        .RefreshOnFileOpen = False
+        .MissingItemsLimit = xlMissingItemsDefault
+    End With
+    ActiveSheet.PivotTables("PivotTable4").RepeatAllLabels xlRepeatLabels
+    ActiveSheet.PivotTables("PivotTable4").AddDataField ActiveSheet.PivotTables( _
+        "PivotTable4").PivotFields("Hours"), "Sum of Hours" _
+        , xlSum
+    With ActiveSheet.PivotTables("PivotTable4").PivotFields("Employee ID")
+        .Orientation = xlRowField
+        .Position = 1
+    End With
+End Sub
+
+Private Sub SummarizeSheets()
+
+Dim lastrow As Long
+Dim NextRow As Long
+
+'copy and paste Report1 values to summary sheet
+Sheets("Report1").Range("A2:G100").Copy
+   
+    Sheets("Summary").Range("A2").PasteSpecial xlPasteValues
+    Application.CutCopyMode = False
+    
+' find next open row in the summary tab.   
+lastrow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+NextRow = lastrow + 1
+
+
+'copy and paste Report2 values to bottom of summary sheet.
+Sheets("Report2").Range("A2:G100").Copy
+
+    Sheets("Summary").Range("A" & NextRow).PasteSpecial xlPasteValues
+    Application.CutCopyMode = False
+    
+'find new next open row in the summary tab.    
+lastrow = Sheets("Summary").Cells(Rows.Count, 1).End(xlUp).Row
+NextRow = lastrow + 1
+
+'copy and paste Report3 values to new bottom of summary sheet.
+Sheets("Report3").Range("A2:B100, D2:H100").Copy
+
+    Sheets("Summary").Range("A" & NextRow).PasteSpecial xlPasteValues
+    Application.CutCopyMode = False
+    
+Range("A1").Select
+
+End Sub
+
+Private Sub saveas()
+'
+'This sub saves a copy of the newly built report in specified file location.
+'Currently the file location is named by date of the report, so the following includes code to return what month and year it is
+'so that the file is saved in the current month's folder
+'
+
+Application.ScreenUpdating = False
+
+Dim fname As String
+Dim sfolder As String
+Dim fdate As String
+Dim lmonth As String
+Dim lyear As Long
+
+'find current month and year
+lmonth = MonthName(Month(Date))
+lyear = Year(Date)
+
+'save a copy of the report in dynamic file location
+fdate = Format(Date, "mm.dd.yy")
+fname = "Report" & Range("M1") & " through " & Range("N1") & " " & Range("O1") & ".xlsx"
+sfolder = "[insert file path up to folder containing all years needed]" & " " & lyear & "\"
+Workbooks("Rehire Outstanding Balances TEST").SaveCopyAs Filename:=sfolder & fname
+
+Workbooks.Open (sfolder & fname)
+
+'closes report builder without saving so any unnecessary changs made by end-users are not overwriting expected structures.
+Workbooks("ReportBuilder").Close savechanges:=False
+Workbooks(fname).Activate
+
+End Sub
+Private Sub ReportEmail()
+'
+'creates a new email with desired body text written in HTML, tags the shared file location in the bottom of the email
+'requires outlook object library 16.0 enabled in tools>references
+'
+
+Dim objOL As Outlook.Application
+Dim objns As Object
+Dim objfolder As Object
+Dim spath As String
+Dim sname As String
+Dim scomplete As String
+    spath = Excel.Application.ActiveWorkbook.Path
+    sname = Excel.Application.ActiveWorkbook.name
+    scomplete = Excel.Application.ActiveWorkbook.Path + "\" + Application.ActiveWorkbook.name
+
+Set objOL = New Outlook.Application
+Set objns = objOL.GetNamespace("MAPI")
+Set objfolder = objns.GetDefaultFolder(olFolderInbox)
+
+Dim NewEmail As Outlook.MailItem
+Set NewEmail = Outlook.CreateItemFromTemplate("[insert file path of desired Outlook template]")
+Dim strbody As String
+Dim strbody2 As String
+strbody = "[insert desired email text marked up in HTML]"
+strbody2 = "[insert any more text marked up in HTML if needed]"
+
+'create new email with report name and current date as subject
+With NewEmail
+    .Subject = "Report | " & Date
+    .HTMLBody = strbody & strbody2 & "<p align=""center"">" & "<a href='file:///" & scomplete & "'>" & sname & "</p></a>"
+    .Display
+    
+End With
+    
+End Sub
