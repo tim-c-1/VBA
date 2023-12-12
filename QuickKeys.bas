@@ -53,33 +53,38 @@ Attribute PasteValues.VB_ProcData.VB_Invoke_Func = "V\n14"
     Selection.PasteSpecial Paste:=xlPasteValues
 End Sub
 
-Sub CompRateEmail()
-
-Dim objOL As Outlook.Application
-Dim objns As Object
-Dim objfolder As Object
-
-Set objOL = New Outlook.Application
-Set objns = objOL.GetNamespace("MAPI")
-Set objfolder = objns.GetDefaultFolder(olFolderInbox)
+Sub EmailReport()
+'This sub creates a new email for the currently active file.
+'It will attach a copy of the file as well as insert the file path as a link at the end of the email body.
+'The subject will be your report name as a string, a space, and then the current date.
+'
+'Requires Outlook Obejct Library enabled in tools>references
+'
 
 Dim NewEmail As Outlook.MailItem
-Set NewEmail = Outlook.CreateItemFromTemplate("C:\Users\tcooney\AppData\Roaming\Microsoft\Templates\Comp Rate Query.oft")
+Set NewEmail = Outlook.CreateItemFromTemplate([insert outlook template file path as string])
 
-With NewEmail
-    .Subject = "Comp Rate Query | " & Date
-    .SendUsingAccount
+Dim spath As String
+Dim sname As String
+Dim scomplete As String
+    spath = Excel.Application.ActiveWorkbook.Path
+    sname = Excel.Application.ActiveWorkbook.name
+    scomplete = Excel.Application.ActiveWorkbook.Path + "\" + Application.ActiveWorkbook.name
+
+ With NewEmail
+    .Subject = "[insert report name as string]" &" "& Date
+    .HTMLBody = .Body & "</br>" & "</br>" & "<p align=""left"">" & "<a href='file:///" & scomplete & "'>" & sname & "</p></a>"
+    .Attachments.Add (ActiveWorkbook.FullName)
     .Display
     
-End With
-
+ End With
 End Sub
 
-Sub NewCheckPullSheet()
+Sub NewSheet()
 '
-' NewCheckPullSheet Macro
-'
-
+'copies the information in currently active sheet, then inserts a new worksheet as the last sheet in the workbook,
+'and clears contents from range "B22:K50" to preserve the template around it. Change this range if you need a different one cleared.
+'sets the new sheet name to the current date formatted as "mm.dd.yy"
 '
     Dim ns As Worksheet
     Dim nsName As String
@@ -94,12 +99,16 @@ Sub NewCheckPullSheet()
 
 End Sub
 
-Sub emailedFOAcomment()
-Attribute emailedFOAcomment.VB_ProcData.VB_Invoke_Func = "A\n14"
-'Insert new threaded comment that reads "Emailed FOA"
+Sub createnewcomment()
+Attribute emailedcomment.VB_ProcData.VB_Invoke_Func = "A\n14"
+'Insert new threaded comment that reads "Emailed"
 'Keyboard Shortcut: ctrl+shift+a
+'
+'Change the "Emailed" to whichever text you need to quickly add as a threaded comment to a cell.
+'Only works as the first comment to be added to a cell. For comment replies, see next sub.
+'
 
-Selection.AddCommentThreaded "Emailed FOA"
+Selection.AddCommentThreaded "Emailed"
 
 End Sub
 
@@ -107,6 +116,9 @@ Sub replytocomment()
 Attribute replytocomment.VB_ProcData.VB_Invoke_Func = "R\n14"
 'reply to existing comment on currently selected cell
 'Keyboard Shortcut: ctrl+shift+r
+'asks the user to input custom text for the comment
+'if the user does not input text in the message box, the sub quits.
+'
 
 Dim tdate As String
 tdate = Format(Date, "mm/dd/yyyy")
