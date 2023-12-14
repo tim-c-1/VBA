@@ -1,0 +1,197 @@
+Option Explicit
+'
+'This code is intended to take power query data from a "builder spreadsheet" and create a copy
+'of just the values- creating a record of error reports by day in the specified folder.
+'It expects that there are two worksheets, one for error information, and the other for auditing information.
+'
+
+Sub BuildErrorReport()
+'
+'This is the main sub that is called from within worksheet button
+'First asks user to confirm that they have adjusted any missing information from the soruce query
+'If they click anything but "yes", the sub will exit and nothing happens.
+'
+
+Dim response As Long
+
+response = MsgBox("Confirm you have saved today's files in the folder and updated any manual lookup rows.", vbYesNo)
+
+If response = vbNo Then
+Exit Sub
+End If
+Call emptycols
+Call ErrorReportSave
+Call ErrorReportEmail
+
+Workbooks("Error Report Builder.xlsm").Close savechanges:=False
+
+End Sub
+
+
+Sub ErrorReportSave()
+'
+'This sub creates a new workbook, copies all data into it, and removes any dynamic connections
+'so the report can create a log of reports by day.
+'The files are saved into folders named by year>month, so the variables in the file name 
+'are tied to the current date so the report is always saved in that date's folder. Change these 
+'variables as needed to direct the file to the correct location.
+'
+Application.ScreenUpdating = False
+
+Dim fname, sfolder, fdate, lmonth As String
+Dim lyear As Long
+
+lmonth = MonthName(Month(Date))
+lyear = Year(Date)
+
+fdate = Format(Date, "mm.dd.yy")
+fname = "Errors " & fdate & ".xlsx"
+sfolder = "[insert file path]" & lyear & "\" & lmonth & "\"
+
+'create new blank workbook, add a sheet, rename sheets to desired names
+Dim newbook As Workbook
+Set newbook = Workbooks.Add
+    With newbook
+        .Sheets.Add
+        .Sheets(1).Name = "Errors"
+        .Sheets(2).Name = "Audit Info"
+        
+    End With
+
+'copy all info, paste to new workbook
+Workbooks("Error Report Builder").Activate
+Sheets("Error Report CSVs").Cells.Copy
+newbook.Activate
+Range("A1").PasteSpecial xlPasteAllUsingSourceTheme
+    Application.CutCopyMode = False
+Range("A1").Select
+
+'copy all info from audit sheet, paste to new workbook's audit sheet    
+Workbooks("Error Report Builder").Sheets("Audit Info").Activate
+Cells.Copy
+newbook.Sheets("audit info").Activate
+Range("A1").PasteSpecial xlPasteAllUsingSourceTheme
+    Application.CutCopyMode = False
+
+'remove query connection
+   Sheets("Errors").Activate
+   Range("Report_CSVs[[#Headers],[Receiver ID]]").Select
+   ActiveSheet.ListObjects("Report_CSVs").Unlist
+
+   Sheets("Audit Info").Activate
+   Range("Audit_Info[[#Headers],[Report Date]]").Select
+   ActiveSheet.ListObjects("Audit_Info").Unlist
+    
+'format IDs as numbers
+'copies col of numbers stored as text, pastes to blank col with the add method,
+'then takes new values and replaces those stored as text
+Dim lastrow As Long
+lastrow = newbook.Sheets("audit info").Cells(Rows.Count, 1).End(xlUp).Row
+
+    Range("D2:D" & lastrow).Copy
+    Range("G2:G" & lastrow).PasteSpecial , xlPasteSpecialOperationAdd
+    Application.CutCopyMode = False
+    Range("G2:G" & lastrow).Copy
+    Range("D2:D" & lastrow).PasteSpecial xlPasteValues
+    Range("D2:D" & lastrow).NumberFormat = "00000000"
+    Range("G:G").Delete
+    
+'need to save new file before breaking links
+newbook.SaveAs Filename:=sfolder & fname
+
+'break links via var and loop
+'this skips any expected missing links
+'breaking links is import to keep each day's data static- or else records will always show new data
+Dim mylinks As Variant
+mylinks = newbook.LinkSources(Type:=xlLinkTypeExcelLinks)
+Dim i As Long
+
+If Not IsEmpty(mylinks) Then
+    For i = 1 To UBound(mylinks)
+   newbook.BreakLink Name:=mylinks(i), Type:=xlLinkTypeExcelLinks
+Next i
+End If
+    
+'clean up report
+Sheets("audit info").Range("a1:f1").AutoFilter
+With newbook.Sheets("Errors")
+    .Range("A1").AutoFilter
+    .Activate
+End With
+
+Application.ScreenUpdating = True
+
+End Sub
+
+Sub ErrorReportEmail()
+'
+'This sub drafts an email from a pre-made outlook template
+'It attaches a copy of the new workbook and a link to the shared file location in the body
+'
+Dim NewEmail As Outlook.MailItem
+Set NewEmail = Outlook.CreateItemFromTemplate("[insert template location]")
+
+Dim spath As String
+Dim sname As String
+Dim scomplete As String
+    spath = Excel.Application.ActiveWorkbook.Path
+    sname = Excel.Application.ActiveWorkbook.Name
+    scomplete = Excel.Application.ActiveWorkbook.Path + "\" + Application.ActiveWorkbook.Name
+
+ With NewEmail
+    .Subject = "Error Report | " & Date
+    .HTMLBody = .Body & "</br>" & "</br>" & "<p align=""left"">" & "<a href='file:///" & scomplete & "'>" & sname & "</p></a>"
+    .Attachments.Add (ActiveWorkbook.FullName)
+    .Display
+    
+ End With
+End Sub
+
+Private Sub emptycols()
+'
+'This sub loops through columns in the report that are expected to only have data occassionally 
+'when no data is found, this hides the columns to keep the final product legible and streamlined
+'
+
+Dim i As Long
+Dim col1, col2, col3, col4 As Long
+Dim lastrow As Long
+lastrow = Sheets("Error Report CSVs").Cells(Rows.Count, 1).End(xlUp).Row
+col1 = Range("k2").Column
+col2 = Range("l2").Column
+col3 = Range("m2").Column
+col4 = Range("n2").Column
+
+For i = 2 To lastrow
+   
+   If Cells(i, col1).Value <> "" Then GoTo Line2
+   
+Next i
+
+Cells(i, col1).EntireColumn.Hidden = True
+
+Line2:
+
+  For i = 2 To lastrow
+      If Cells(i, col2).Value <> "" Then GoTo Line3
+  Next i
+
+Cells(i, col2).EntireColumn.Hidden = True
+
+Line3:
+
+    For i = 2 To lastrow
+      If Cells(i, col3).Value <> "" Then GoTo Line4
+    Next i
+
+Cells(i, col3).EntireColumn.Hidden = True
+
+Line4:
+
+    For i = 2 To lastrow
+      If Cells(i, col4).Value <> "" Then Exit Sub
+    Next i
+
+Cells(i, col4).EntireColumn.Hidden = True
+
+End Sub
